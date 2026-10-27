@@ -1822,7 +1822,7 @@ class SlackAdapter(BasePlatformAdapter):
             self._bot_user_id = self._bot_display_name = None
             self._team_clients, self._team_bot_user_ids, self._team_bot_names = {}, {}, {}
             self._app = AsyncApp(
-                token=bot_tokens[0], client=self._new_web_client(bot_tokens[0], proxy_url),
+                client=self._new_web_client(bot_tokens[0], proxy_url),
                 before_authorize=_slack_per_request_proxy_middleware(proxy_url))
             _apply_slack_proxy(self._app.client, proxy_url)
             for token in bot_tokens:
