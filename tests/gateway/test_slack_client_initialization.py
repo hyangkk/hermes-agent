@@ -21,6 +21,7 @@ async def test_connect_preserves_authenticated_client_without_duplicate_token_wa
     )
     authenticate = AsyncMock()
 
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-environment-fallback")
     monkeypatch.setattr(slack_adapter, "_resolve_slack_proxy_url", lambda: proxy_url)
     monkeypatch.setattr(
         slack_adapter, "_get_scoped_secret", lambda name, default="": "xapp-test"

@@ -870,6 +870,7 @@ class TestSlackProxyBehavior:
             # **_kwargs absorbs adapter kwargs we don't model here (e.g. user_agent_prefix).
             def __init__(self, token, **_kwargs):
                 self.token = token
+                self.headers = {"User-Agent": "fake-slack-sdk"}
                 self.proxy = "constructor-default"
                 suffix = token.split("-")[-1]
                 self.auth_test = AsyncMock(

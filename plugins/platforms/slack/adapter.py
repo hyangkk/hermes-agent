@@ -1807,23 +1807,21 @@ class SlackAdapter(BasePlatformAdapter):
             # Cancel AND await the old watchdog so it can't see _running=False,
             # exit, and leave no monitor behind.
             await self._cancel_socket_watchdog("[Slack] Prior watchdog task failed while stopping")
-            # A zombie Socket Mode handler would double-respond to every event.
+            # Stop the old handler before reconnecting so it cannot dispatch events twice.
             await self._stop_socket_mode_handler()
             await self._close_workspace_clients()
-            # Close any previous handler before creating a new one so that calling connect() a second time
-            # (e.g. during a gateway restart or in-process reconnect attempt) does not leave a zombie Socket
-            # Mode connection alive. Both the old and new connections would otherwise receive every Slack
-            # event and dispatch it twice, producing double responses — the same bug that affected
-            # DiscordAdapter (#18187).
             self._app = None
             self._app_token = app_token
             self._proxy_url = proxy_url
             # Reset so a reconnect with dropped/rotated tokens carries no stale identities.
             self._bot_user_id = self._bot_display_name = None
             self._team_clients, self._team_bot_user_ids, self._team_bot_names = {}, {}, {}
+            # Bolt also reads SLACK_BOT_TOKEN, so client= would warn even without an explicit token.
             self._app = AsyncApp(
-                client=self._new_web_client(bot_tokens[0], proxy_url),
+                token=bot_tokens[0],
                 before_authorize=_slack_per_request_proxy_middleware(proxy_url))
+            self._app.client.headers["User-Agent"] = (
+                f"{_HERMES_SLACK_USER_AGENT_PREFIX} {self._app.client.headers['User-Agent']}")
             _apply_slack_proxy(self._app.client, proxy_url)
             for token in bot_tokens:
                 await self._authenticate_workspace(token, proxy_url)
