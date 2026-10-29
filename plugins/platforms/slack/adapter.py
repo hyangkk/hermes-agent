@@ -2018,16 +2018,8 @@ class SlackAdapter(BasePlatformAdapter):
 
     async def _clear_thread_status_quietly(
         self, chat_id: str, metadata: Optional[dict[str, Any]] = None) -> None:
-        """Best-effort status clear for send() paths that skip the normal clear (empty responses,
-        ephemeral slash replies, exceptions before ``thread_ts`` resolved) so the thread doesn't
-        stay "is thinking...". Errors must not mask the SendResult.
-
-        Issue #24117: the assistant thread can stay stuck "is thinking..." when a turn ends through a path
-        that never reaches the regular ``if thread_ts: stop_typing`` clear — an empty final response, a
-        slash-command ephemeral reply, or an exception raised before ``thread_ts`` was resolved.
-        ``stop_typing`` is already idempotent (clearing an unset status is a no-op on Slack's side), so this
-        just guarantees it runs without letting a cleanup error mask the caller's SendResult.
-        """
+        """Clear status on empty responses, ephemeral replies and early send errors (#24117).
+        Idempotent stop_typing resolves tracked metadata; errors must not mask the SendResult."""
         try:
             await self.stop_typing(chat_id, metadata=metadata)
         except Exception as e:  # pragma: no cover - defensive cleanup
@@ -4233,6 +4225,12 @@ class SlackAdapter(BasePlatformAdapter):
             return None
         edited = updated_message.get("edited")
         edited_ts = str(edited.get("ts") or "") if isinstance(edited, dict) else ""
+        # Reply counts, reactions and unfurls also emit message_changed after a cold start.
+        if not edited_ts:
+            return None
+        previous_message = event.get("previous_message")
+        if isinstance(previous_message, dict) and previous_message.get("edited") == edited:
+            return None
         outer_event_ts = str(event.get("ts") or "")
         changed_event_ts = (
             str(event.get("event_ts") or edited_ts or "")
