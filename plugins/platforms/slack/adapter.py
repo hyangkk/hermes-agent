@@ -2738,13 +2738,8 @@ class SlackAdapter(BasePlatformAdapter):
         status_key = self._workspace_thread_key(team_id, chat_id, str(thread_ts))
         _status_started: Optional[float] = None
         if status_key:
-            # Keep the first start time across _keep_typing refreshes so long turns show elapsed
-            # time; stored in the status entry so it shares eviction/stop_typing cleanup.
-            # Heartbeat (#45702): preserve the first refresh's start time across _keep_typing refreshes so a
-            # long turn surfaces elapsed time ("still working… (2m03s)") instead of a static "is
-            # thinking..." that reads as stuck — which is what provokes mid-turn "you there?" pings. Stored
-            # inside the tracked status entry so it shares the existing bounds/eviction and is dropped by
-            # stop_typing with the rest of the status state.
+            # Preserve the first start across refreshes so long turns show elapsed time (#45702).
+            # Keeping it with the thread status shares bounded eviction and stop_typing cleanup.
             _prev_entry = self._active_status_threads.get(status_key)
             if isinstance(_prev_entry, dict):
                 _status_started = _prev_entry.get("started")
@@ -2764,9 +2759,13 @@ class SlackAdapter(BasePlatformAdapter):
 
     async def _set_thread_status(
         self, chat_id: str, team_id: str, thread_ts: str, status: str, fail_label: str) -> None:
-        """``assistant.threads.setStatus`` (empty ``status`` clears); failures are debug-logged."""
+        """Set native loading state; legacy APIs take text, sessions take lifecycle values."""
         try:
-            _set_status = _session_status_method(self._get_client(chat_id, team_id=team_id))
+            client = self._get_client(chat_id, team_id=team_id)
+            _set_status = _session_status_method(client)
+            if _sdk_supports_agent_sessions() and getattr(client, "agents_sessions_setStatus", None) is not None:
+                # Sessions reject free text and require an explicit completion transition.
+                status = "processing" if status else "active"
             await _set_status(channel_id=chat_id, thread_ts=thread_ts, status=status)
         except Exception as e:
             logger.debug("[Slack] assistant.threads.setStatus %s: %s", fail_label, e)
